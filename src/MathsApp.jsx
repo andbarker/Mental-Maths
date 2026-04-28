@@ -403,7 +403,6 @@ export default function MathsApp() {
   const [loaded, setLoaded] = useState(false);
   const [bearMood, setBearMood] = useState("default"); // default, happy, thinking, party
   const [reviewMode, setReviewMode] = useState(false);
-  const [soundOn, setSoundOn] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [helpRevealed, setHelpRevealed] = useState(false);
   const [name, setName] = useState("");
@@ -425,10 +424,6 @@ export default function MathsApp() {
       } catch (e) {
         // no saved progress yet
       }
-      try {
-        const s = await window.storage.get("maths-sound");
-        if (s?.value === "on") setSoundOn(true);
-      } catch (e) {}
       try {
         const n = await window.storage.get("maths-name");
         if (n?.value) {
@@ -509,50 +504,6 @@ export default function MathsApp() {
     setTimeout(() => setConfetti([]), 2200);
   };
 
-  const playSound = (type) => {
-    if (!soundOn) return;
-    try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      const ctx = new Ctx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "sine";
-      const t = ctx.currentTime;
-      if (type === "correct") {
-        // Cheerful arpeggio: C5 → E5 → G5
-        osc.frequency.setValueAtTime(523.25, t);
-        osc.frequency.setValueAtTime(659.25, t + 0.1);
-        osc.frequency.setValueAtTime(783.99, t + 0.2);
-        gain.gain.setValueAtTime(0.18, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
-        osc.start(t);
-        osc.stop(t + 0.5);
-      } else {
-        // Soft low bonk
-        osc.frequency.setValueAtTime(220, t);
-        osc.frequency.exponentialRampToValueAtTime(160, t + 0.18);
-        gain.gain.setValueAtTime(0.12, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
-        osc.start(t);
-        osc.stop(t + 0.25);
-      }
-    } catch (e) {
-      // audio not available, silently skip
-    }
-  };
-
-  const toggleSound = async () => {
-    const next = !soundOn;
-    setSoundOn(next);
-    try {
-      await window.storage.set("maths-sound", next ? "on" : "off");
-    } catch (e) {}
-    if (next) playSound("correct");
-  };
-
   const advanceToNext = () => {
     const dp = progress[day] || { solved: [], stars: 0 };
     const remaining = DAYS[day].problems
@@ -614,7 +565,6 @@ export default function MathsApp() {
       setBearMood("happy");
       setWinLine(WIN_LINES[Math.floor(Math.random() * WIN_LINES.length)]);
       launchConfetti();
-      playSound("correct");
 
       const newSolved = [...new Set([...dayProg.solved, idx])];
       const newStars = newSolved.length;
@@ -657,7 +607,6 @@ export default function MathsApp() {
       setWrongCount(newWrong);
       if (newWrong >= 2) setShowHint(true);
       setStreak(0); // streak broken
-      playSound("wrong");
     }
   };
 
@@ -791,14 +740,6 @@ export default function MathsApp() {
               {stickerReveal && (
                 <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-500 animate-pulse" />
               )}
-            </button>
-            <button
-              onClick={toggleSound}
-              className="w-9 h-9 rounded-full bg-white/70 backdrop-blur flex items-center justify-center shadow-sm hover:bg-white"
-              title={soundOn ? "Sound on" : "Sound off"}
-              aria-label={soundOn ? "Turn sound off" : "Turn sound on"}
-            >
-              <span className="text-base">{soundOn ? "🔊" : "🔇"}</span>
             </button>
             <button
               onClick={() => {
@@ -1263,12 +1204,18 @@ export default function MathsApp() {
       {/* === Sticker book modal === */}
       {showStickerBook && (
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-2 sm:p-4"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center"
           style={{ zIndex: 58 }}
+          onClick={() => setShowStickerBook(false)}
         >
           <div
             className="bg-gradient-to-b from-amber-50 to-orange-50 rounded-t-3xl w-full max-w-md shadow-2xl bounce-in flex flex-col"
-            style={{ border: "3px solid #d4a373", maxHeight: "92vh" }}
+            style={{
+              border: "3px solid #d4a373",
+              maxHeight: "92vh",
+              paddingTop: "env(safe-area-inset-top, 0px)",
+            }}
+            onClick={(e) => e.stopPropagation()}
           >
             {/* Book header */}
             <div className="px-5 py-4 border-b-2 border-dashed border-amber-200 flex items-center justify-between">
@@ -1280,9 +1227,10 @@ export default function MathsApp() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setShowStickerBook(false)}
-                className="w-9 h-9 rounded-full bg-white flex items-center justify-center font-bold text-stone-600 shadow"
-                aria-label="Close"
+                className="w-12 h-12 rounded-full bg-white flex items-center justify-center text-2xl font-black text-stone-700 shadow-md active:scale-90 transition-transform"
+                aria-label="Close sticker book"
               >
                 ✕
               </button>
@@ -1354,6 +1302,20 @@ export default function MathsApp() {
                 Get answers right to find more stickers ✨<br />
                 Rare stickers come from streaks of 5+ or finishing a day!
               </div>
+            </div>
+
+            {/* Pinned bottom action bar — always visible, big tap target */}
+            <div
+              className="px-4 py-3 border-t-2 border-dashed border-amber-200 bg-amber-50"
+              style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))" }}
+            >
+              <button
+                type="button"
+                onClick={() => setShowStickerBook(false)}
+                className="w-full py-3 rounded-2xl bg-amber-500 text-white text-lg font-black shadow-md active:scale-95 transition-transform"
+              >
+                Done ✨
+              </button>
             </div>
           </div>
         </div>
