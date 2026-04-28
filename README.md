@@ -1,2 +1,2 @@
 # Mental-Maths
-Mental match for 2nd Grade Kids (approx 7)
+Mental math app for 2nd grade kids (approx 7) to practice their addition and subtraction
